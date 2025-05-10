@@ -35,12 +35,7 @@ func TestMultiRelayPayloadFallback(t *testing.T) {
 	const numRelays = 2
 	relayTimeout := 500 * time.Millisecond
 	backend := newTestBackend(t, numRelays, relayTimeout)
-	defer func() {
-		backend.relays[0].Server.Close()
-		if backend.relays[1].Server != nil {
-			backend.relays[1].Server.Close()
-		}
-	}()
+	defer closeServers(backend.relays)
 
 	fastRelay := backend.relays[0]
 	slowRelay := backend.relays[1]
@@ -122,4 +117,10 @@ func TestMultiRelayPayloadFallback(t *testing.T) {
 		require.Equal(t, http.StatusBadGateway, resp2.Code)
 		require.Contains(t, strings.ToLower(resp2.Body.String()), "no successful relay response")
 	})
+}
+
+func closeServers(relays []*mock.Relay) {
+	for _, relay := range relays {
+		relay.Server.Close()
+	}
 }
