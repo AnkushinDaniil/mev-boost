@@ -104,6 +104,7 @@ func TestMultiRelayPayloadFallback(t *testing.T) {
 				},
 			},
 		}
+		slowRelay.GetPayloadResponse = blindedBlockToBlockResponse(signedBlindedBlock)
 
 		// Simulate failure of the winning relay before payload request
 		slowRelay.Server.Close()
