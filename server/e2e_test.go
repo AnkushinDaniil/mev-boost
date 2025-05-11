@@ -245,6 +245,78 @@ func TestSemanticallyInvalidSignedBlindedBlock(t *testing.T) {
 	})
 }
 
+func TestSignedBlindedBlockWithSlotMismatch(t *testing.T) {
+	const (
+		parentHashStr = "0xe28385e7bd68df656cd0042b74b69c3104b5356ed1f20eb69f1f925df47a3ab7"
+		pubKeyStr     = "0x8a1d7b8dd64e0aafe7ea7b6c95065c9364cf99d38470c12ee807d55f7de1529ad29ce2c422e0b65e3d5a05c02caca249"
+		numRelays     = 1
+	)
+	relayTimeout := 500 * time.Millisecond
+	backend := newTestBackend(t, numRelays, relayTimeout)
+	defer closeServers(backend.relays)
+
+	relay := backend.relays[0]
+
+	slot := uint64(12345)
+	slotMismatch := slot + 1
+	parentHash := mock.HexToHash(parentHashStr)
+	pubkey := mock.HexToPubkey(pubKeyStr)
+
+	relay.GetHeaderResponse = relay.MakeGetHeaderResponse(
+		10_000_000_000,
+		parentHash.String(),
+		parentHash.String(),
+		pubKeyStr,
+		spec.DataVersionElectra,
+	)
+
+	path := getHeaderPath(slot, parentHash, pubkey)
+	header := http.Header{}
+	header.Set(HeaderAccept, MediaTypeJSON)
+	resp := backend.request(t, http.MethodGet, path, header, nil)
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	bidResp := new(builderSpec.VersionedSignedBuilderBid)
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &bidResp))
+
+	signed := &eth2ApiV1Electra.SignedBlindedBeaconBlock{
+		Signature: mock.HexToSignature("0x8c795f751f812eabbabdee85100a06730a9904a4b53eedaa7f546fe0e23cd75125e293c6b0d007aa68a9da4441929d16072668abb4323bb04ac81862907357e09271fe414147b3669509d91d8ffae2ec9c789a5fcd4519629b8f2c7de8d0cce9"),
+		Message: &eth2ApiV1Electra.BlindedBeaconBlock{
+			Slot:          phase0.Slot(slotMismatch), // different slot
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root(parentHash),
+			StateRoot:     phase0.Root{0x01},
+			Body: &eth2ApiV1Electra.BlindedBeaconBlockBody{
+				RANDAOReveal: phase0.BLSSignature{0xee},
+				ETH1Data: &phase0.ETH1Data{
+					BlockHash: bidResp.Electra.Message.Header.BlockHash[:],
+				},
+				Graffiti: phase0.Hash32{0xcd},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits: bitfield.NewBitvector512(),
+				},
+				ProposerSlashings:      []*phase0.ProposerSlashing{},
+				Deposits:               []*phase0.Deposit{},
+				VoluntaryExits:         []*phase0.SignedVoluntaryExit{},
+				ExecutionPayloadHeader: bidResp.Electra.Message.Header,
+				AttesterSlashings:      []*electra.AttesterSlashing{},
+				Attestations:           []*electra.Attestation{},
+				BLSToExecutionChanges:  []*capella.SignedBLSToExecutionChange{},
+				BlobKZGCommitments:     []deneb.KZGCommitment{},
+				ExecutionRequests:      &electra.ExecutionRequests{},
+			},
+		},
+	}
+
+	reqHeader := http.Header{}
+	reqHeader.Set("Content-Type", "application/json")
+	resp2 := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signed)
+
+	require.Equal(t, http.StatusBadGateway, resp2.Code,
+		"expected 502 since MEV-Boost had no cached bid for slot %d", slotMismatch)
+	require.Contains(t, strings.ToLower(resp2.Body.String()), "no successful relay response")
+}
+
 func closeServers(relays []*mock.Relay) {
 	for _, relay := range relays {
 		relay.Server.Close()
