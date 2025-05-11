@@ -24,15 +24,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-const (
-	blockHashStr       = "0xe28385e7bd68df656cd0042b74b69c3104b5356ed1f20eb69f1f925df47a3ab7"
-	parentHashStr      = blockHashStr
-	pubKeyStr          = "0x8a1d7b8dd64e0aafe7ea7b6c95065c9364cf99d38470c12ee807d55f7de1529ad29ce2c422e0b65e3d5a05c02caca249"
-	simulatedBlockHash = "0x534809bd2b6832edff8d8ce4cb0e50068804fd1ef432c8362ad708a74fdc0e46"
-)
-
 func TestMultiRelayPayloadFallback(t *testing.T) {
-	const numRelays = 2
+	const (
+		blockHashStr       = "0xe28385e7bd68df656cd0042b74b69c3104b5356ed1f20eb69f1f925df47a3ab7"
+		parentHashStr      = blockHashStr
+		pubKeyStr          = "0x8a1d7b8dd64e0aafe7ea7b6c95065c9364cf99d38470c12ee807d55f7de1529ad29ce2c422e0b65e3d5a05c02caca249"
+		simulatedBlockHash = "0x534809bd2b6832edff8d8ce4cb0e50068804fd1ef432c8362ad708a74fdc0e46"
+		numRelays          = 2
+	)
 	relayTimeout := 500 * time.Millisecond
 	backend := newTestBackend(t, numRelays, relayTimeout)
 	defer closeServers(backend.relays)
