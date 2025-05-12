@@ -7,20 +7,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/flashbots/mev-boost/server/mock"
-	"github.com/flashbots/mev-boost/server/params"
-	"github.com/holiman/uint256"
-	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/stretchr/testify/require"
-
 	builderSpec "github.com/attestantio/go-builder-client/spec"
 	eth2ApiV1Electra "github.com/attestantio/go-eth2-client/api/v1/electra"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/flashbots/mev-boost/server/mock"
+	"github.com/flashbots/mev-boost/server/params"
+	"github.com/holiman/uint256"
+	"github.com/prysmaticlabs/go-bitfield"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -31,6 +30,7 @@ const (
 )
 
 func setupTestBackend(t *testing.T, relays int, timeout time.Duration) (*testBackend, func()) {
+	t.Helper()
 	backend := newTestBackend(t, relays, timeout)
 	cleanup := func() {
 		closeServers(backend.relays)
@@ -38,7 +38,8 @@ func setupTestBackend(t *testing.T, relays int, timeout time.Duration) (*testBac
 	return backend, cleanup
 }
 
-func setupBasicRequest(backend *testBackend, t *testing.T) *builderSpec.VersionedSignedBuilderBid {
+func setupBasicRequest(t *testing.T, backend *testBackend) *builderSpec.VersionedSignedBuilderBid {
+	t.Helper()
 	pubkey := mock.HexToPubkey(testPubKey)
 	parentHash := mock.HexToHash(testBlockHash)
 	path := getHeaderPath(testSlot, parentHash, pubkey)
@@ -68,7 +69,7 @@ func TestMultiRelayPayloadFallback(t *testing.T) {
 	slowRelay.GetHeaderResponse = slowRelay.MakeGetHeaderResponse(10_000_000_000, testBlockHash, testBlockHash, testPubKey, spec.DataVersionElectra)
 
 	t.Run("RequestBuilderBids", func(t *testing.T) {
-		bid := setupBasicRequest(backend, t)
+		bid := setupBasicRequest(t, backend)
 		expected := uint256.NewInt(10_000_000_000)
 		actual := bid.Electra.Message.Value
 		require.Zero(t, actual.Cmp(expected), "expected highest bid %s, got %s", expected, actual)
@@ -98,7 +99,7 @@ func TestSemanticallyInvalidSignedBlindedBlock(t *testing.T) {
 	relay := backend.relays[0]
 	relay.GetHeaderResponse = relay.MakeGetHeaderResponse(10_000_000_000, testBlockHash, testBlockHash, testPubKey, spec.DataVersionElectra)
 
-	bid := setupBasicRequest(backend, t)
+	bid := setupBasicRequest(t, backend)
 
 	t.Run("TamperExecutionPayloadHeader", func(t *testing.T) {
 		tampered := *bid.Electra.Message.Header
@@ -158,7 +159,7 @@ func TestSignedBlindedBlockWithSlotMismatch(t *testing.T) {
 		spec.DataVersionElectra,
 	)
 
-	bid := setupBasicRequest(backend, t)
+	bid := setupBasicRequest(t, backend)
 	signed := createSignedBlindedBlock(bid.Electra.Message.Header, parentHash, slotMismatch, testSig)
 
 	reqHeader := http.Header{}
