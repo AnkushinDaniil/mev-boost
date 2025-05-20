@@ -33,7 +33,9 @@ func setupTestBackend(t *testing.T, relays int, timeout time.Duration) (*testBac
 	t.Helper()
 	backend := newTestBackend(t, relays, timeout)
 	cleanup := func() {
-		closeServers(backend.relays)
+		for _, relay := range backend.relays {
+			relay.Server.Close()
+		}
 	}
 	return backend, cleanup
 }
@@ -195,11 +197,5 @@ func createSignedBlindedBlock(header *deneb.ExecutionPayloadHeader, blockHash ph
 				ExecutionRequests:      &electra.ExecutionRequests{},
 			},
 		},
-	}
-}
-
-func closeServers(relays []*mock.Relay) {
-	for _, relay := range relays {
-		relay.Server.Close()
 	}
 }
