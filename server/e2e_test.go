@@ -118,13 +118,6 @@ func TestSemanticallyInvalidSignedBlindedBlock(t *testing.T) {
 
 	t.Run("EmptySignature", func(t *testing.T) {
 		signed := createSignedBlindedBlock(bid.Electra.Message.Header, mock.HexToHash(testBlockHash), testSlot, "")
-		relay.OverrideHandleGetPayload(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", MediaTypeJSON)
-			w.WriteHeader(http.StatusBadRequest)
-			if _, err := w.Write([]byte(`{"code": 400, "message": "could not verify payload signature"}`)); err != nil {
-				t.Fatalf("failed to write response: %v", err)
-			}
-		})
 		// Validate the signature
 		// https://github.com/flashbots/mev-boost-relay/blob/fdb359fa6b6a7f96d37fb1f8cabb02c3868f965f/services/api/service.go#L654-L660
 		relay.OverrideHandleGetPayload(func(w http.ResponseWriter, _ *http.Request) {
