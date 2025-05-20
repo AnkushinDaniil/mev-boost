@@ -57,6 +57,35 @@ func setupBasicRequest(t *testing.T, backend *testBackend) *builderSpec.Versione
 	return bid
 }
 
+func TestSuccessfulSignedBlindedBlock(t *testing.T) {
+	backend, cleanup := setupTestBackend(t, 1, 500*time.Millisecond)
+	defer cleanup()
+
+	relay := backend.relays[0]
+
+	relay.GetHeaderResponse = relay.MakeGetHeaderResponse(
+		10_000_000_000,
+		testBlockHash,
+		testBlockHash,
+		testPubKey,
+		spec.DataVersionElectra,
+	)
+
+	bid := setupBasicRequest(t, backend)
+
+	blockHash := mock.HexToHash(testBlockHash)
+	signed := createSignedBlindedBlock(bid.Electra.Message.Header, blockHash, testSlot, testSig)
+
+	relay.GetPayloadResponse = blindedBlockToBlockResponse(signed)
+
+	reqHeader := http.Header{}
+	reqHeader.Set("Content-Type", "application/json")
+	resp := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signed)
+
+	require.Equal(t, http.StatusOK, resp.Code, "expected success from relay")
+	require.Contains(t, strings.ToLower(resp.Body.String()), `"blockHash":"`+testBlockHash, "payload body missing expected blockHash")
+}
+
 func TestMultiRelayPayloadFallback(t *testing.T) {
 	backend, cleanup := setupTestBackend(t, 2, 500*time.Millisecond)
 	defer cleanup()
