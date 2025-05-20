@@ -64,13 +64,17 @@ func TestMultiRelayPayloadFallback(t *testing.T) {
 	fastRelay := backend.relays[0]
 	slowRelay := backend.relays[1]
 
+	// Simulate two relays: fast but low-value, and slow but high-value.
 	fastRelay.ResponseDelay = 0
 	slowRelay.ResponseDelay = 300 * time.Millisecond
 
+	// Assign bid values: fastRelay bids low, slowRelay bids high.
 	fastRelay.GetHeaderResponse = fastRelay.MakeGetHeaderResponse(1_000_000_000, testBlockHash, testBlockHash, testPubKey, spec.DataVersionElectra)
 	slowRelay.GetHeaderResponse = slowRelay.MakeGetHeaderResponse(10_000_000_000, testBlockHash, testBlockHash, testPubKey, spec.DataVersionElectra)
 
 	t.Run("RequestBuilderBids", func(t *testing.T) {
+		// Check that MEV-Boost correctly selects the highest bid from slowRelay,
+		// even though it responds later than fastRelay.
 		bid := setupBasicRequest(t, backend)
 		expected := uint256.NewInt(10_000_000_000)
 		actual := bid.Electra.Message.Value
@@ -78,6 +82,10 @@ func TestMultiRelayPayloadFallback(t *testing.T) {
 	})
 
 	t.Run("SimulateBuilderFailure", func(t *testing.T) {
+		// Simulate a crash or disconnect of the selected (slow) relay
+		// before the validator sends a signed payload. This should
+		// result in a 502 error, confirming that MEV-Boost does not fall back
+		// to non-winning relays for getPayload.
 		header := fastRelay.GetHeaderResponse.Electra.Message.Header
 		blockHash := mock.HexToHash("0x534809bd2b6832edff8d8ce4cb0e50068804fd1ef432c8362ad708a74fdc0e46")
 
@@ -104,6 +112,9 @@ func TestSemanticallyInvalidSignedBlindedBlock(t *testing.T) {
 	bid := setupBasicRequest(t, backend)
 
 	t.Run("TamperExecutionPayloadHeader", func(t *testing.T) {
+		// Tamper with the execution header after receiving the bid,
+		// e.g., changing the blockHash. This simulates a malicious or buggy validator.
+		// MEV-Boost should reject this signed block due to cache miss.
 		tampered := *bid.Electra.Message.Header
 		tampered.BlockHash = mock.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 
@@ -119,7 +130,12 @@ func TestSemanticallyInvalidSignedBlindedBlock(t *testing.T) {
 	})
 
 	t.Run("EmptySignature", func(t *testing.T) {
+		// Simulate a payload with a missing validator signature.
+		// The relay should reject this with a 400 response,
+		// and MEV-Boost should translate that into a 502 response.
 		signed := createSignedBlindedBlock(bid.Electra.Message.Header, mock.HexToHash(testBlockHash), testSlot, "")
+
+		// Override mock relay handler to simulate signature verification failure.
 		// Validate the signature
 		// https://github.com/flashbots/mev-boost-relay/blob/fdb359fa6b6a7f96d37fb1f8cabb02c3868f965f/services/api/service.go#L654-L660
 		relay.OverrideHandleGetPayload(func(w http.ResponseWriter, _ *http.Request) {
@@ -144,7 +160,7 @@ func TestSignedBlindedBlockWithSlotMismatch(t *testing.T) {
 
 	relay := backend.relays[0]
 	parentHash := mock.HexToHash(testBlockHash)
-	slotMismatch := testSlot + 1
+	slotMismatch := testSlot + 1 // simulate slot skew or delay
 
 	relay.GetHeaderResponse = relay.MakeGetHeaderResponse(
 		10_000_000_000,
@@ -154,6 +170,9 @@ func TestSignedBlindedBlockWithSlotMismatch(t *testing.T) {
 		spec.DataVersionElectra,
 	)
 
+	// Request bid for testSlot, but send block for testSlot+1.
+	// This mismatch should result in MEV-Boost rejecting the payload
+	// because the slot is part of the cache key and doesn't match.
 	bid := setupBasicRequest(t, backend)
 	signedBlindedBlock := createSignedBlindedBlock(bid.Electra.Message.Header, parentHash, slotMismatch, testSig)
 
