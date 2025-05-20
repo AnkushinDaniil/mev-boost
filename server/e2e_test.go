@@ -81,13 +81,13 @@ func TestMultiRelayPayloadFallback(t *testing.T) {
 		header := fastRelay.GetHeaderResponse.Electra.Message.Header
 		blockHash := mock.HexToHash("0x534809bd2b6832edff8d8ce4cb0e50068804fd1ef432c8362ad708a74fdc0e46")
 
-		signed := createSignedBlindedBlock(header, blockHash, testSlot, testSig)
-		slowRelay.GetPayloadResponse = blindedBlockToBlockResponse(signed)
+		signedBlindedBlock := createSignedBlindedBlock(header, blockHash, testSlot, testSig)
+		slowRelay.GetPayloadResponse = blindedBlockToBlockResponse(signedBlindedBlock)
 		slowRelay.Server.Close()
 
 		reqHeader := http.Header{}
 		reqHeader.Set("Content-Type", "application/json")
-		resp := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signed)
+		resp := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signedBlindedBlock)
 
 		require.Equal(t, http.StatusBadGateway, resp.Code)
 		require.Contains(t, strings.ToLower(resp.Body.String()), "no successful relay response")
@@ -107,12 +107,12 @@ func TestSemanticallyInvalidSignedBlindedBlock(t *testing.T) {
 		tampered := *bid.Electra.Message.Header
 		tampered.BlockHash = mock.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 
-		signed := createSignedBlindedBlock(&tampered, tampered.BlockHash, testSlot, testSig)
-		relay.GetPayloadResponse = blindedBlockToBlockResponse(signed)
+		signedBlindedBlock := createSignedBlindedBlock(&tampered, tampered.BlockHash, testSlot, testSig)
+		relay.GetPayloadResponse = blindedBlockToBlockResponse(signedBlindedBlock)
 
 		reqHeader := http.Header{}
 		reqHeader.Set("Content-Type", "application/json")
-		resp := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signed)
+		resp := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signedBlindedBlock)
 
 		require.Equal(t, http.StatusBadGateway, resp.Code)
 		require.Contains(t, resp.Body.String(), "no successful relay response")
@@ -155,11 +155,11 @@ func TestSignedBlindedBlockWithSlotMismatch(t *testing.T) {
 	)
 
 	bid := setupBasicRequest(t, backend)
-	signed := createSignedBlindedBlock(bid.Electra.Message.Header, parentHash, slotMismatch, testSig)
+	signedBlindedBlock := createSignedBlindedBlock(bid.Electra.Message.Header, parentHash, slotMismatch, testSig)
 
 	reqHeader := http.Header{}
 	reqHeader.Set("Content-Type", "application/json")
-	resp := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signed)
+	resp := backend.request(t, http.MethodPost, params.PathGetPayload, reqHeader, signedBlindedBlock)
 
 	require.Equal(t, http.StatusBadGateway, resp.Code)
 	require.Contains(t, strings.ToLower(resp.Body.String()), "no successful relay response")
